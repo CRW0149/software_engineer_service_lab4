@@ -1,0 +1,91 @@
+server:
+  port: 17000
+spring:
+  application:
+    name: "gateway_server"
+  data:
+    redis:
+      host: 47.108.64.26
+      port: 6379
+      password: CRWcrw200306
+  cloud:
+    gateway:
+      routes:
+        #        动态路由
+        - id: consumerServer
+          uri: lb://consumer #使用name,注意是lb(loadbalancer缩写):,不是http:
+          predicates:
+            - Path=/user/**
+          #限流
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@hostAddrKeyResolver}"
+                redis-rate-limiter:
+                  replenishRate: 1
+                  burstCapacity: 2
+                  fallbackUri: forward:/fallback
+
+          #熔断
+#          filters:
+#            - name: CircuitBreaker
+#              args:
+#                # 使用哪个熔断器
+#                name: backendA
+#                # 失败后调用的链接地址（必须以forward开头）#写在gateway里面
+#                fallbackUri: forward:/fallback
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins: "*"
+            allowed-methods: "*"
+            allowed-headers: "*"
+eureka:
+  instance:
+    #    显示ip地址而不是机器名
+    prefer-ip-address: true
+    instance-id: "${spring.cloud.client.ip-address}:${server.port}"
+    #    15秒没有通信，那就被从服务中心注销
+    lease-expiration-duration-in-seconds: 15
+    #    每5秒通信一次，心跳
+    lease-renewal-interval-in-seconds: 5
+  client:
+    #    微服务注册中心的地址
+    service-url:
+      defaultZone: "http://eureka15000:15000/eureka/,http://eureka16000:16000/eureka/"
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        #失败率阈值。这里设置为1，表示如果失败率达到1%，断路器会打开。
+        failure-rate-threshold: 1
+        #最小调用次数。断路器在统计失败率之前需要的最小调用次数。这里设置为1。
+        minimum-number-of-calls: 1
+        #滑动窗口类型
+        sliding-window-type: Time_BASED
+        #滑动窗口大小
+        sliding-window-size: 10
+        #自动从打开状态过渡到半开状态。
+        automatic-transition-from-open-to-half-open-enabled: true
+        #打开状态的等待持续时间。断路器在打开状态时会等待2秒钟，然后进入半开状态。
+        wait-duration-in-open-state: 2s
+        #开状态允许的调用次数。断路器在半开状态时允许3次调用，
+        permitted-number-of-calls-in-half-open-state: 3
+        #记录为失败的异常类型
+        record-exceptions:
+          - java.lang.Exception
+    instances:
+      backendA:
+        base-config: default
+
+  ratelimiter:
+    configs:
+      default:
+        limit-refresh-period: 1s
+        limit-for-period: 10
+        timeout-duration: 0
+    instances:
+      backendA:
+        base-config: default
